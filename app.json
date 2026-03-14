@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Magnedrum",
+    "slug": "magnedrum-app",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "dark",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "assetBundlePatterns": [
+      "assets/*"
+    ],
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#7B7ABF"
+    },
+    "android": {
+      "package": "com.zorbalegrec.magnedrumapp",
+      "permissions": ["android.permission.MODIFY_AUDIO_SETTINGS"],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#7B7ABF"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "603feee0-1a82-40ed-8031-590bcadb53c3"
+      }
+    }
+  }
+}
