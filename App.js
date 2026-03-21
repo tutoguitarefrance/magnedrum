@@ -579,8 +579,11 @@ export default function App() {
     bpmRef.current = newBpm;
     setBpm(newBpm);
     if (isPlayingRef.current) {
-      stopAll();
-      setTimeout(() => startWithCountdown(), 50);
+      setTimeout(() => {
+        currentStepRef.current = 0;
+        nextStepTimeRef.current = audioCtxRef.current.currentTime;
+        runScheduler();
+      }, 30);
     }
   };
 
