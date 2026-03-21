@@ -173,12 +173,15 @@ export default function App() {
   const [soundsLoaded, setSoundsLoaded] = useState(false);
 
   const appFade        = useRef(new Animated.Value(0)).current;
-  const barAnim        = useRef(new Animated.Value(0)).current;
-  const barAnimRef     = useRef(null);
+  const [barLeftPx, setBarLeftPx] = useState(null);
+  const rafRef    = useRef(null);
+  const cellWRef  = useRef(cellW);
+  const instrWRef = useRef(INSTR_W);
 
   const isPlayingRef      = useRef(false);
   const currentStepRef    = useRef(0);
   const nextStepTimeRef   = useRef(0);
+  const playStartTimeRef  = useRef(0);
   const bpmRef            = useRef(80);
   const stepsRef          = useRef(8);
   const patternRef        = useRef(pattern);
@@ -382,9 +385,9 @@ export default function App() {
   const runScheduler = useCallback(() => {
     const ctx = audioCtxRef.current;
     if (!ctx || !isPlayingRef.current) return;
-    const stepsPerBeat = stepsRef.current === 8 ? 2 : 4;
-    const secsPerStep  = 60 / bpmRef.current / stepsPerBeat;
     while (nextStepTimeRef.current < ctx.currentTime + LOOKAHEAD_SECS) {
+      const stepsPerBeat = stepsRef.current === 8 ? 2 : 4;
+      const secsPerStep  = 60 / bpmRef.current / stepsPerBeat;
       const step = currentStepRef.current;
       const p    = patternRef.current;
       INSTRUMENTS.forEach(({ key }) => {
@@ -416,21 +419,29 @@ export default function App() {
     }
   }, [scheduleSound, playMetronomeClick]);
 
-  const startBar = useCallback((n, b) => {
-    barAnim.stopAnimation();
-    barAnim.setValue(0);
-    const dur = (60000 / b) / (n === 8 ? 2 : 4) * n;
-    const loop = Animated.loop(
-      Animated.timing(barAnim, { toValue:n, duration:dur, easing:Easing.linear, useNativeDriver:false })
-    );
-    loop.start();
-    barAnimRef.current = loop;
-  }, [barAnim]);
+  const startBar = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const tick = () => {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !isPlayingRef.current) return;
+      const n = stepsRef.current;
+      const now = ctx.currentTime;
+      const secsPerMeasure = (60 / bpmRef.current) * 4;
+      const elapsed = (now - playStartTimeRef.current) % secsPerMeasure;
+      const pos = (elapsed / secsPerMeasure) * n;
+      const cw = cellWRef.current;
+      const iw = instrWRef.current;
+      setBarLeftPx(iw + cw / 4 + (pos / n) * (n * cw + (n - 1) * 3 - cw));
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
 
   const stopBar = useCallback(() => {
-    barAnimRef.current?.stop();
-    barAnim.setValue(0);
-  }, [barAnim]);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    setBarLeftPx(null);
+  }, []);
 
   // ── Grooves : sauvegarde / chargement ────────────────────────────────────
   const loadGroove = useCallback((idx) => {
@@ -509,12 +520,13 @@ export default function App() {
       currentStepRef.current  = 0;
       const startTime = scheduledStartRef.current ?? (ctx?.currentTime ?? 0);
       nextStepTimeRef.current   = startTime;
+      playStartTimeRef.current  = startTime;
       scheduledStartRef.current = null;
       schedulerRef.current    = setInterval(runScheduler, SCHEDULE_INTERVAL);
       // Retarder la barre pour la synchroniser avec l'audio
       const delayMs = ctx ? Math.max(0, (startTime - ctx.currentTime) * 1000) : 0;
-      if (delayMs > 10) setTimeout(() => startBar(stepsRef.current, bpmRef.current), delayMs);
-      else startBar(stepsRef.current, bpmRef.current);
+      if (delayMs > 10) setTimeout(() => { playStartTimeRef.current = audioCtxRef.current.currentTime; startBar(); }, delayMs);
+      else { playStartTimeRef.current = audioCtxRef.current.currentTime; startBar(); }
     } else {
       isPlayingRef.current = false;
       clearInterval(schedulerRef.current);
@@ -523,33 +535,11 @@ export default function App() {
     return () => { clearInterval(schedulerRef.current); stopBar(); };
   }, [isPlaying, runScheduler, startBar, stopBar]);
 
-  // Mise à jour de la vitesse de la barre lors d'un changement de BPM en cours de lecture
-  // — reprend depuis la position courante pour éviter le saut visuel
+  // Resync nextStepTime on BPM change (bar position updates automatically via RAF)
   useEffect(() => {
     if (!isPlaying) return;
-    barAnim.stopAnimation((currentVal) => {
-      const n = stepsRef.current;
-      const stepDur = (60000 / bpm) / (n === 8 ? 2 : 4);
-      const totalDur = stepDur * n;
-      const clamped = Math.max(0, Math.min(currentVal ?? 0, n - 0.01));
-
-      const startLoop = () => {
-        barAnim.setValue(0);
-        const loop = Animated.loop(
-          Animated.timing(barAnim, { toValue: n, duration: totalDur, easing: Easing.linear, useNativeDriver: false })
-        );
-        loop.start();
-        barAnimRef.current = loop;
-      };
-
-      if (clamped <= 0) { startLoop(); return; }
-
-      barAnim.setValue(clamped);
-      const remainingDur = stepDur * (n - clamped);
-      const seg = Animated.timing(barAnim, { toValue: n, duration: remainingDur, easing: Easing.linear, useNativeDriver: false });
-      seg.start(({ finished }) => { if (finished && isPlayingRef.current) startLoop(); });
-      barAnimRef.current = seg;
-    });
+    const ctx = audioCtxRef.current;
+    if (ctx) nextStepTimeRef.current = ctx.currentTime;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bpm]);
 
@@ -584,14 +574,20 @@ export default function App() {
     setGridMode(mode);
   };
 
-  const changeBpm = (d) => setBpm((b) => Math.min(200, Math.max(40, b + d)));
+  const changeBpm = (d) => {
+    const newBpm = Math.min(200, Math.max(40, bpmRef.current + d));
+    bpmRef.current = newBpm;
+    setBpm(newBpm);
+    if (isPlayingRef.current) {
+      stopAll();
+      setTimeout(() => startWithCountdown(), 50);
+    }
+  };
 
-  const barW    = Math.floor(cellW / 2);
-  const barLeft = barAnim.interpolate({
-    inputRange:  [0, steps],
-    outputRange: [INSTR_W + cellW / 4, INSTR_W + steps * cellW + (steps - 1) * GAP - cellW * 3 / 4],
-    extrapolate: "clamp",
-  });
+  cellWRef.current  = cellW;
+  instrWRef.current = INSTR_W;
+
+  const barW = Math.floor(cellW / 2);
   const gridZoneH  = INSTRUMENTS.length * (cellH + 4) + 4;
   const noteIconSz = Math.min(TOOLBAR_H * 0.35, 36);
 
@@ -627,15 +623,15 @@ export default function App() {
                 </Text>
               </Animated.View>
             )}
-            {isPlaying && (
-              <Animated.View pointerEvents="none"
-                style={[S.playBar, { left:barLeft, width:barW, height:gridZoneH }]}>
+            {isPlaying && barLeftPx !== null && (
+              <View pointerEvents="none"
+                style={[S.playBar, { left:barLeftPx, width:barW, height:gridZoneH }]}>
                 <LinearGradient
                   colors={["rgba(255,160,0,0)", "rgba(240,130,0,0.35)", "rgba(200,90,0,0.6)", "rgba(240,130,0,0.35)", "rgba(255,160,0,0)"]}
                   start={{ x:0, y:0.5 }} end={{ x:1, y:0.5 }}
                   style={StyleSheet.absoluteFill}
                 />
-              </Animated.View>
+              </View>
             )}
 
             {INSTRUMENTS.map((instr, rowIdx) => (
@@ -763,7 +759,13 @@ export default function App() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[S.metroBtn, metronomeActive && S.metroBtnOn]}
-              onPress={() => setMetronomeActive(v => !v)}
+              onPress={() => {
+                setMetronomeActive(v => !v);
+                if (isPlayingRef.current) {
+                  stopAll();
+                  startWithCountdown();
+                }
+              }}
               onLongPress={() => { activeVolumeInstrRef.current = 'METRO'; setActiveVolumeInstr('METRO'); }}
               delayLongPress={400}>
               <Image source={METRO_ICON}

@@ -217,16 +217,16 @@ export function createSequencer({
   function setBpm(newBpm) {
     if (!_ctx) { _bpm = newBpm; return; }
 
-    const now        = _ctx.currentTime;
-    const oldDur     = rotDur();                          // durée avant changement
-    const elapsed    = now - _rotStart;                   // temps écoulé dans la rotation courante
-    const fraction   = (elapsed % oldDur) / oldDur;      // fraction de tour accomplie (0–1)
+    const now     = _ctx.currentTime;
+    const oldDur  = rotDur();
+    // Angle courant (0–360°) calculé avec l'ancien BPM
+    const angle   = (((now - _rotStart) % oldDur) / oldDur) * 360;
 
     _bpm = Math.max(1, newBpm);
+    _scheduled.clear();
 
-    const newDur     = rotDur();
-    // Repositionner _rotStart de sorte que la fraction soit conservée
-    _rotStart = now - fraction * newDur;
+    // Repositionner _rotStart pour que ce même angle soit préservé avec le nouveau BPM
+    _rotStart = now - (angle / 360) * rotDur();
   }
 
   /** Volume général du sequencer (0–1) */
