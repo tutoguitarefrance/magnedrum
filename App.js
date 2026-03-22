@@ -7,6 +7,8 @@ import { Asset } from "expo-asset";
 import { AudioContext } from "react-native-audio-api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
+import { useKeepAwake } from "expo-keep-awake";
+import { createSequencer } from "./sequencer";
 
 const TOKENS = {
   BD: require("./assets/BD.png"),
@@ -51,7 +53,7 @@ const convertPattern = (pat, fromSteps, toSteps) => {
 };
 
 // ── Écran de chargement ───────────────────────────────────────────────────────
-function LoadingScreen({ progress }) {
+function LoadingScreen({ progress, introMuted, onToggleMute }) {
   const { width: W, height: H } = Dimensions.get("window");
   const bounceHH = useRef(new Animated.Value(0)).current;
   const bounceSN = useRef(new Animated.Value(0)).current;
@@ -113,12 +115,16 @@ function LoadingScreen({ progress }) {
       </View>
       <Text style={[S.progressText, { fontSize:Math.min(W*0.05,26) }]}>{pct} %</Text>
       <Text style={[S.loadHint, { fontSize:Math.min(W*0.022,11) }]}>Chargement des sons...</Text>
+      <TouchableOpacity onPress={onToggleMute} style={{ marginTop: 24, paddingHorizontal:20, paddingVertical:10, borderRadius:20, backgroundColor:"#ffffff22" }}>
+        <Text style={{ color:"#fff", fontSize:Math.min(W*0.04,18) }}>{introMuted ? "🔇 Son coupé" : "🔊 Couper le son"}</Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
 
 // ── App principale ─────────────────────────────────────────────────────────────
 export default function App() {
+  useKeepAwake();
   const [dims, setDims] = useState(Dimensions.get("window"));
   useEffect(() => {
     const sub = Dimensions.addEventListener("change", ({ window }) => setDims(window));
@@ -134,7 +140,7 @@ export default function App() {
   const BORDER    = 5;
   const BOARD_W   = W - MARGIN * 2;
   const INNER_W   = BOARD_W - (PAD + BORDER) * 2;
-  const INSTR_W   = Math.floor(INNER_W * 0.10);
+  const INSTR_W   = Math.floor(INNER_W * 0.065);
   const GAP       = 3;
 
   const [gridMode, setGridMode] = useState("8th");
@@ -157,20 +163,24 @@ export default function App() {
   const [isPlaying, setIsPlaying]   = useState(false);
   const [isInCountdown, setIsInCountdown] = useState(false);
   const [countdown, setCountdown]   = useState(null);
+  const [swing, setSwing]                 = useState(0);
   const [withCountdown, setWithCountdown] = useState(true);
   const [autoAccel, setAutoAccel]         = useState(false);
   const [accelFlash, setAccelFlash]       = useState(null);
   const accelFlashAnim = useRef(new Animated.Value(0)).current;
   const [metronomeActive, setMetronomeActive] = useState(false);
-  const [instrVolumes,  setInstrVolumes]  = useState({ HH: 1, SN: 1, BD: 1, METRO: 0.8 });
+  const [instrVolumes,  setInstrVolumes]  = useState({ HH: 0.6, SN: 1, BD: 1, METRO: 0.8 });
+  const [mutedInstrs,   setMutedInstrs]   = useState({ HH: false, SN: false, BD: false, METRO: false });
   const [masterVolume,  setMasterVolume]  = useState(1);
   const [activeVolumeInstr, setActiveVolumeInstr] = useState(null);
   const [grooves, setGrooves] = useState({
-    "8th":  [null, null, null, null],
-    "16th": [null, null, null, null],
+    "8th":  Array(8).fill(null),
+    "16th": Array(8).fill(null),
   });
   const [loadProgress, setLoadProgress] = useState(0);
   const [soundsLoaded, setSoundsLoaded] = useState(false);
+  const [introMuted,   setIntroMuted]   = useState(false);
+  const [allMutedMsg,  setAllMutedMsg]  = useState(false);
 
   const appFade        = useRef(new Animated.Value(0)).current;
   const [barLeftPx, setBarLeftPx] = useState(null);
@@ -178,6 +188,7 @@ export default function App() {
   const cellWRef  = useRef(cellW);
   const instrWRef = useRef(INSTR_W);
 
+  const seqRef            = useRef(null);
   const isPlayingRef      = useRef(false);
   const currentStepRef    = useRef(0);
   const nextStepTimeRef   = useRef(0);
@@ -187,16 +198,24 @@ export default function App() {
   const patternRef        = useRef(pattern);
   const schedulerRef      = useRef(null);
   const scheduledStartRef  = useRef(null);
+  const swingRef           = useRef(0);
+  const swingSliderRef     = useRef(null);
+  const swingPageXRef      = useRef(0);
+  const swingWidthRef      = useRef(100);
   const countdownTimers    = useRef([]);
-  const groovesRef         = useRef({ "8th": [null,null,null,null], "16th": [null,null,null,null] });
-  const groovePressAnims   = useRef([0,1,2,3].map(() => new Animated.Value(0))).current;
+  const dragPaintRef       = useRef(null);
+  const cellsContainerRefs = useRef({});
+  const cellsPageXRef      = useRef({});
+  const countdownNodes     = useRef([]);
+  const groovesRef         = useRef({ "8th": Array(8).fill(null), "16th": Array(8).fill(null) });
+  const groovePressAnims   = useRef(Array(8).fill(null).map(() => new Animated.Value(0))).current;
   const groovePressTimers  = useRef({});
   const autoAccelRef         = useRef(false);
   const cycleCountRef        = useRef(0);
   const startBarRef          = useRef(null);
   const autoAccelBarFlag     = useRef(false);
   const metronomeActiveRef   = useRef(false);
-  const instrVolumesRef      = useRef({ HH: 1, SN: 1, BD: 1, METRO: 0.8 });
+  const instrVolumesRef      = useRef({ HH: 0.6, SN: 1, BD: 1, METRO: 0.8 });
   const masterVolumeRef      = useRef(1);
   const activeVolumeInstrRef = useRef(null);
   const gainNodesRef         = useRef({ HH: null, SN: null, BD: null, METRO: null });
@@ -224,7 +243,7 @@ export default function App() {
         } else {
           instrVolumesRef.current = { ...instrVolumesRef.current, [key]: newVol };
           setInstrVolumes(prev => ({ ...prev, [key]: newVol }));
-          if (gainNodesRef.current[key]) gainNodesRef.current[key].gain.value = newVol;
+          if (gainNodesRef.current[key] && !mutedInstrs[key]) gainNodesRef.current[key].gain.value = newVol;
         }
       },
       onPanResponderRelease: () => {
@@ -234,7 +253,14 @@ export default function App() {
     })
   ).current;
 
+  useEffect(() => {
+    const seq = createSequencer({ bpm: bpmRef.current });
+    seqRef.current = seq;
+    return () => { seq.dispose?.(); };
+  }, []);
+
   useEffect(() => { autoAccelRef.current = autoAccel; }, [autoAccel]);
+  useEffect(() => { swingRef.current = swing; }, [swing]);
 
   useEffect(() => { patternRef.current          = pattern;          }, [pattern]);
   useEffect(() => { stepsRef.current            = steps;            }, [steps]);
@@ -257,7 +283,9 @@ export default function App() {
     AsyncStorage.getItem("magnedrum_grooves_v1").then(val => {
       if (!val) return;
       try {
-        const data = JSON.parse(val);
+        const raw = JSON.parse(val);
+        const pad = (arr) => { const a = arr || []; while (a.length < 8) a.push(null); return a; };
+        const data = { "8th": pad(raw["8th"]), "16th": pad(raw["16th"]) };
         groovesRef.current = data;
         setGrooves(data);
       } catch {}
@@ -400,7 +428,11 @@ export default function App() {
           playMetronomeClick(nextStepTimeRef.current, step === 0);
       }
       currentStepRef.current  = (step + 1) % stepsRef.current;
-      nextStepTimeRef.current += secsPerStep;
+      // Swing : r=0.5 (droit) → r=0.667 (shuffle ternaire)
+      const r = 0.5 + swingRef.current / 6;
+      nextStepTimeRef.current += step % 2 === 0
+        ? r * 2 * secsPerStep
+        : (1 - r) * 2 * secsPerStep;
 
       // ── Auto-accélération : +2 BPM toutes les 4 mesures ─────────────────
       if (autoAccelRef.current && currentStepRef.current === 0) {
@@ -447,9 +479,22 @@ export default function App() {
   const loadGroove = useCallback((idx) => {
     const groove = groovesRef.current[gridMode][idx];
     if (!groove) return;
-    if (gridMode === "8th") setPattern8(groove);
-    else setPattern16(groove);
-  }, [gridMode]);
+    // Compatibilité ancien format (pattern direct) vs nouveau format ({ pattern, swing, instrVolumes })
+    const pat  = groove.pattern ?? groove;
+    const sw   = groove.swing   ?? 0;
+    const vols = groove.instrVolumes ?? null;
+    if (gridMode === "8th") setPattern8(pat);
+    else setPattern16(pat);
+    swingRef.current = sw;
+    setSwing(sw);
+    if (vols) {
+      instrVolumesRef.current = vols;
+      setInstrVolumes(vols);
+      Object.entries(vols).forEach(([key, v]) => {
+        if (gainNodesRef.current[key]) gainNodesRef.current[key].gain.value = mutedInstrs[key] ? 0 : v;
+      });
+    }
+  }, [gridMode, mutedInstrs]);
 
   const handleGroovePressIn = useCallback((idx) => {
     const snapshot = JSON.parse(JSON.stringify(gridMode === "8th" ? pattern8 : pattern16));
@@ -457,9 +502,10 @@ export default function App() {
       toValue: 1, duration: 3000, useNativeDriver: false,
     }).start();
     groovePressTimers.current[idx] = setTimeout(() => {
+      const entry = { pattern: snapshot, swing: swingRef.current, instrVolumes: { ...instrVolumesRef.current } };
       const updated = {
         ...groovesRef.current,
-        [gridMode]: groovesRef.current[gridMode].map((g, i) => i === idx ? snapshot : g),
+        [gridMode]: groovesRef.current[gridMode].map((g, i) => i === idx ? entry : g),
       };
       groovesRef.current = updated;
       setGrooves({ ...updated });
@@ -477,6 +523,8 @@ export default function App() {
   const stopAll = useCallback(() => {
     countdownTimers.current.forEach(clearTimeout);
     countdownTimers.current = [];
+    countdownNodes.current.forEach(n => { try { n.stop(); } catch (_) {} });
+    countdownNodes.current = [];
     setCountdown(null);
     setIsInCountdown(false);
     setAccelFlash(null);
@@ -494,8 +542,25 @@ export default function App() {
     const countdownStart = ctx.currentTime + 0.05;
     const sequencerStart = countdownStart + 4 * secsPerBeat;
 
-    // Clics HH sur les 4 temps du décompte
-    [0, 1, 2, 3].forEach(i => scheduleSound('HH', countdownStart + i * secsPerBeat));
+    // Clics baguette synthétisés sur les 4 temps du décompte
+    const dest = masterGainRef.current ?? ctx.destination;
+    countdownNodes.current = [0, 1, 2, 3].map(i => {
+      const when = countdownStart + i * secsPerBeat;
+      try {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(dest);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1800, when);
+        osc.frequency.exponentialRampToValueAtTime(300, when + 0.025);
+        gain.gain.setValueAtTime(0.9, when);
+        gain.gain.exponentialRampToValueAtTime(0.001, when + 0.045);
+        osc.start(when);
+        osc.stop(when + 0.05);
+        return osc;
+      } catch { return null; }
+    }).filter(Boolean);
 
     setIsInCountdown(true);
     setCountdown(1);
@@ -558,6 +623,20 @@ export default function App() {
     ).start();
   }, [accelFlash, accelFlashAnim]);
 
+  const toggleMute = (key) => {
+    setMutedInstrs(prev => {
+      const muted = !prev[key];
+      if (gainNodesRef.current[key]) gainNodesRef.current[key].gain.value = muted ? 0 : (instrVolumesRef.current[key] ?? 1);
+      const next = { ...prev, [key]: muted };
+      if (INSTRUMENTS.every(i => next[i.key])) {
+        stopAll();
+        setAllMutedMsg(true);
+        setTimeout(() => setAllMutedMsg(false), 3000);
+      }
+      return next;
+    });
+  };
+
   const toggleCell = (instrKey, stepIdx) => {
     const newVal = pattern[instrKey]?.[stepIdx] ? 0 : 1;
     if (newVal === 1) playSound(instrKey);
@@ -579,7 +658,9 @@ export default function App() {
     bpmRef.current = newBpm;
     setBpm(newBpm);
     if (isPlayingRef.current) {
+      if (masterGainRef.current) masterGainRef.current.gain.value = 0;
       setTimeout(() => {
+        if (masterGainRef.current) masterGainRef.current.gain.value = masterVolumeRef.current;
         currentStepRef.current = 0;
         nextStepTimeRef.current = audioCtxRef.current.currentTime;
         runScheduler();
@@ -588,24 +669,74 @@ export default function App() {
   };
 
   cellWRef.current  = cellW;
-  instrWRef.current = INSTR_W;
+  instrWRef.current = 0;
 
   const barW = Math.floor(cellW / 2);
   const gridZoneH  = INSTRUMENTS.length * (cellH + 4) + 4;
   const noteIconSz = Math.min(TOOLBAR_H * 0.35, 36);
+  // Largeurs des sections toolbar basées sur la largeur écran
+  const TW_DIVIDERS = 3 * (1.5 + 8) + 6 * 6; // dividers + gaps ≈ 64px
+  const TW_AVAIL    = BOARD_W - 20 - TW_DIVIDERS;
+  const TW_MODE  = Math.round(TW_AVAIL * 0.18);
+  const TW_SWING = Math.round(TW_AVAIL * 0.14);
+  const TW_BPM   = Math.round(TW_AVAIL * 0.30);
+  const TW_PLAY  = TW_AVAIL - TW_MODE - TW_SWING - TW_BPM;
 
-  if (!soundsLoaded) return <LoadingScreen progress={loadProgress} />;
+  if (!soundsLoaded) return (
+    <LoadingScreen
+      progress={loadProgress}
+      introMuted={introMuted}
+      onToggleMute={() => setIntroMuted(prev => {
+        const muted = !prev;
+        if (masterGainRef.current) masterGainRef.current.gain.value = muted ? 0 : masterVolumeRef.current;
+        return muted;
+      })}
+    />
+  );
 
   return (
     <Animated.View style={[S.root, { opacity:appFade }]}>
       <StatusBar hidden />
 
+      {allMutedMsg && (
+        <View pointerEvents="none" style={{ position:"absolute", top:0, left:0, right:0, bottom:0, justifyContent:"center", alignItems:"center", zIndex:100, backgroundColor:"rgba(250,255,250,0.88)" }}>
+          <Text style={{ fontSize:22, fontWeight:"900", color:"#E84020", letterSpacing:2, textAlign:"center" }}>
+            VÉRIFIER LES VOLUMES
+          </Text>
+        </View>
+      )}
+
       {/* ══ TABLEAU ══ */}
-      <View style={[S.board, { height:BOARD_H, margin:MARGIN }]}>
+      <View style={{ flexDirection:"row", height:BOARD_H, margin:MARGIN }}>
+
+        {/* ── Colonne instruments (hors du tableau blanc) ── */}
+        <View style={{ width:INSTR_W, paddingTop: BORDER + PAD + 18 }}>
+          {INSTRUMENTS.map((instr, rowIdx) => (
+            <View key={instr.key} style={{ height: cellH + 4 + (rowIdx < INSTRUMENTS.length-1 ? 1 : 0), justifyContent:"center" }}>
+              <TouchableOpacity
+                onPress={() => toggleMute(instr.key)}
+                onLongPress={() => { activeVolumeInstrRef.current = instr.key; setActiveVolumeInstr(instr.key); }}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <View style={[S.instrChip, { borderColor: instr.color, backgroundColor: instr.color + "22", opacity: mutedInstrs[instr.key] ? 0.35 : 1 }]}>
+                  <Image source={TOKENS[instr.key]}
+                    style={{ width:Math.min(INSTR_W-14, cellH-14), height:Math.min(INSTR_W-14, cellH-14), borderRadius:30 }} />
+                  <View style={[S.instrVolBar, { width: Math.min(INSTR_W-16, 28) }]}>
+                    <View style={[S.instrVolFill, { width:`${Math.round(instrVolumes[instr.key]*100)}%`, backgroundColor:instr.color }]} />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+
+        <View style={{ width:GAP }} />
+
+        <View style={[S.board, { flex:1, height:BOARD_H }]}>
         <View style={S.boardInner}>
 
           <View style={S.labelsRow}>
-            <View style={{ width:INSTR_W }} />
             {labels.map((lbl, i) => {
               const isMain = gridMode==="8th" ? i%2===0 : i%4===0;
               return (
@@ -639,63 +770,78 @@ export default function App() {
 
             {INSTRUMENTS.map((instr, rowIdx) => (
               <View key={instr.key}>
-                <View style={{ flexDirection:"row", alignItems:"center", gap:GAP, marginVertical:2 }}>
-                  <TouchableOpacity
-                    style={{ width:INSTR_W, alignItems:"center", justifyContent:"center" }}
-                    onLongPress={() => { activeVolumeInstrRef.current = instr.key; setActiveVolumeInstr(instr.key); }}
-                    delayLongPress={400}
-                    activeOpacity={0.7}
+                <View style={{ flexDirection:"row", alignItems:"center", marginVertical:2 }}>
+                  <View
+                    style={{ flexDirection:"row", gap:GAP }}
+                    ref={(r) => { if (r) cellsContainerRefs.current[instr.key] = r; }}
+                    onLayout={() => {
+                      cellsContainerRefs.current[instr.key]?.measure((x, y, w, h, pageX) => {
+                        cellsPageXRef.current[instr.key] = pageX;
+                      });
+                    }}
+                    onStartShouldSetResponder={() => true}
+                    onResponderGrant={(e) => {
+                      const x  = e.nativeEvent.pageX - (cellsPageXRef.current[instr.key] ?? 0);
+                      const si = Math.min(steps-1, Math.max(0, Math.floor(x / (cellW + GAP))));
+                      const newVal = pattern[instr.key]?.[si] ? 0 : 1;
+                      dragPaintRef.current = { instrKey: instr.key, paintValue: newVal, lastStep: si };
+                      if (newVal === 1) playSound(instr.key);
+                      setPattern(prev => { const row=[...prev[instr.key]]; row[si]=newVal; return {...prev, [instr.key]:row}; });
+                    }}
+                    onResponderMove={(e) => {
+                      const drag = dragPaintRef.current;
+                      if (!drag) return;
+                      const x  = e.nativeEvent.pageX - (cellsPageXRef.current[instr.key] ?? 0);
+                      const si = Math.min(steps-1, Math.max(0, Math.floor(x / (cellW + GAP))));
+                      if (si === drag.lastStep) return;
+                      drag.lastStep = si;
+                      if (drag.paintValue === 1) playSound(drag.instrKey);
+                      setPattern(prev => { const row=[...prev[drag.instrKey]]; row[si]=drag.paintValue; return {...prev, [drag.instrKey]:row}; });
+                    }}
+                    onResponderRelease={() => { dragPaintRef.current = null; }}
                   >
-                    <View style={[S.instrChip, { borderColor: instr.color, backgroundColor: instr.color + "22" }]}>
-                      <Image source={TOKENS[instr.key]}
-                        style={{ width:Math.min(INSTR_W-14, cellH-14), height:Math.min(INSTR_W-14, cellH-14), borderRadius:30 }} />
-                      <View style={[S.instrVolBar, { width: Math.min(INSTR_W-16, 28) }]}>
-                        <View style={[S.instrVolFill, { width:`${Math.round(instrVolumes[instr.key]*100)}%`, backgroundColor:instr.color }]} />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-
-                  {Array.from({ length:steps }).map((_, si) => {
-                    const isActive   = pattern[instr.key]?.[si] === 1;
-                    const isDownbeat = gridMode==="8th" ? si%2===0 : si%4===0;
-                    const lineW      = isDownbeat ? 3 : 1.5;
-                    const lineColor  = isDownbeat ? "#886655" : "#CCBBAA";
-                    return (
-                      <TouchableOpacity key={si} onPress={() => toggleCell(instr.key, si)}
-                        style={{ width:cellW, height:cellH, justifyContent:"center", alignItems:"center" }}
-                      >
-                        {/* Trait vertical — épais sur les temps forts, fin sur les contre-temps */}
-                        <View style={{
-                          position:"absolute", top:0, bottom:0,
-                          width:lineW, backgroundColor:lineColor,
-                        }} />
-                        {isActive && (
-                          <View style={{ position:"relative",
-                            shadowColor:"#000", shadowOffset:{width:2,height:3},
-                            shadowOpacity:0.32, shadowRadius:3, elevation:5 }}>
-                            <Image source={TOKENS[instr.key]}
-                              style={{ width:tokenSz, height:tokenSz, borderRadius:tokenSz/2 }} />
-                            <View style={[S.tokenGloss, { borderRadius:tokenSz/2,
-                              width:tokenSz*0.42, height:tokenSz*0.32 }]} />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                    {Array.from({ length:steps }).map((_, si) => {
+                      const isActive   = pattern[instr.key]?.[si] === 1;
+                      const isDownbeat = gridMode==="8th" ? si%2===0 : si%4===0;
+                      const lineW      = isDownbeat ? 3 : 1.5;
+                      const lineColor  = isDownbeat ? "#886655" : "#CCBBAA";
+                      return (
+                        <View key={si}
+                          style={{ width:cellW, height:cellH, justifyContent:"center", alignItems:"center" }}
+                        >
+                          <View style={{
+                            position:"absolute", top:0, bottom:0,
+                            width:lineW, backgroundColor:lineColor,
+                          }} />
+                          {isActive && (
+                            <View style={{ position:"relative",
+                              shadowColor:"#000", shadowOffset:{width:2,height:3},
+                              shadowOpacity:0.32, shadowRadius:3, elevation:5 }}>
+                              <Image source={TOKENS[instr.key]}
+                                style={{ width:tokenSz, height:tokenSz, borderRadius:tokenSz/2 }} />
+                              <View style={[S.tokenGloss, { borderRadius:tokenSz/2,
+                                width:tokenSz*0.42, height:tokenSz*0.32 }]} />
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
                 {rowIdx < INSTRUMENTS.length-1 && <View style={S.rowDivider} />}
               </View>
             ))}
           </View>
         </View>
+        </View>
       </View>
 
       {/* ══ GROOVE BAR ══ */}
       <View style={[S.grooveBar, { height:GROOVE_BAR_H, marginHorizontal:MARGIN, marginBottom:MARGIN }]}>
-        <Text style={S.grooveBarLabel}>{gridMode === "8th" ? "Croches" : "Doubles"}</Text>
-        {[0,1,2,3].map(idx => {
+        {[0,1,2,3,4,5,6,7].map(idx => {
           const g = grooves[gridMode][idx];
-          const hasSaved = !!g && Object.values(g).some(row => row.some(v => v === 1));
+          const pat = g?.pattern ?? g;
+          const hasSaved = !!g && !!pat && Object.values(pat).some(row => Array.isArray(row) && row.some(v => v === 1));
           const fillW = groovePressAnims[idx].interpolate({
             inputRange: [0,1], outputRange: ["0%","100%"],
           });
@@ -718,22 +864,51 @@ export default function App() {
       {/* ══ TOOLBAR ══ */}
       <View style={[S.toolbar, { height:TOOLBAR_H, marginHorizontal:MARGIN, marginBottom:MARGIN }]}>
 
-        <View style={S.toolSection}>
-          {["8th","16th"].map((mode) => (
-            <TouchableOpacity key={mode}
-              style={[S.modeBtn, gridMode===mode && S.modeBtnActive]}
-              onPress={() => switchGrid(mode)}>
-              <Image source={NOTES[mode]} style={{ width:noteIconSz, height:noteIconSz, resizeMode:"contain" }} />
-              <Text style={[S.modeBtnSub, gridMode===mode && S.modeBtnActiveText]}>
-                {mode==="8th" ? "Croches" : "Doubles"}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={[S.toolSection, { width:TW_MODE, flex:undefined, flexWrap:"nowrap" }]}>
+          {["8th","16th"].map((mode) => {
+            const iconSz = Math.floor((TW_MODE - 6 - 4) / 2); // 6=gap, 4=padding*2
+            return (
+              <TouchableOpacity key={mode}
+                style={[S.modeBtn, gridMode===mode && S.modeBtnActive, { paddingHorizontal:2, paddingVertical:4 }]}
+                onPress={() => switchGrid(mode)}>
+                <Image source={NOTES[mode]} style={{ width:iconSz, height:iconSz, resizeMode:"contain" }} />
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <View style={S.toolDivider} />
 
-        <View style={S.toolSection}>
+        <View style={{ width:TW_SWING, alignItems:"center", justifyContent:"center", gap:4, paddingHorizontal:4 }}>
+          <Text style={{ color:"#336633", fontSize:9, fontWeight:"700", letterSpacing:2 }}>SWING</Text>
+          <View
+            style={{ width:"100%", height:28, justifyContent:"center" }}
+            ref={(r) => { if (r) swingSliderRef.current = r; }}
+            onLayout={() => {
+              swingSliderRef.current?.measure((x, y, w, h, pageX) => {
+                swingPageXRef.current = pageX;
+                swingWidthRef.current = w;
+              });
+            }}
+            onStartShouldSetResponder={() => true}
+            onResponderGrant={(e) => {
+              const val = Math.max(0, Math.min(1, (e.nativeEvent.pageX - swingPageXRef.current) / swingWidthRef.current));
+              swingRef.current = val; setSwing(val);
+            }}
+            onResponderMove={(e) => {
+              const val = Math.max(0, Math.min(1, (e.nativeEvent.pageX - swingPageXRef.current) / swingWidthRef.current));
+              swingRef.current = val; setSwing(val);
+            }}
+          >
+            <View style={{ height:2, backgroundColor:"#A8D8B8", borderRadius:2, marginHorizontal:8 }} />
+            <View style={{ position:"absolute", left: 8 + swing * (swingWidthRef.current - 24), width:16, height:16, borderRadius:8, backgroundColor:"#22AA44", top:6, shadowColor:"#000", shadowOpacity:0.4, shadowRadius:3, elevation:4 }} />
+          </View>
+          <Text style={{ color:"#336633", fontSize:9, fontWeight:"700" }}>{Math.round(swing * 100)}%</Text>
+        </View>
+
+        <View style={S.toolDivider} />
+
+        <View style={[S.toolSection, { width:TW_BPM, flex:undefined }]}>
           <View style={{ alignItems:"center" }}>
             <Text style={[S.bpmValue, { fontSize:Math.min(TOOLBAR_H*0.38,36) }]}>{bpm}</Text>
             <Text style={S.bpmUnit}>BPM</Text>
@@ -755,7 +930,7 @@ export default function App() {
               </Animated.Text>
             )}
             <TouchableOpacity
-              style={[S.accelBtn, autoAccel && S.accelBtnOn]}
+              style={[S.accelBtn, autoAccel && S.accelBtnOn, { width:47, height:45, justifyContent:"center" }]}
               onPress={() => { setAutoAccel(v => !v); cycleCountRef.current = 0; setAccelFlash(null); }}>
               <Text style={[S.accelBtnText, autoAccel && S.accelBtnTextOn]}>+2</Text>
               <Text style={[S.accelBtnSub,  autoAccel && S.accelBtnTextOn]}>×4</Text>
@@ -784,7 +959,7 @@ export default function App() {
 
         <View style={S.toolDivider} />
 
-        <View style={[S.toolSection, { flex:1.2 }]}>
+        <View style={[S.toolSection, { width:TW_PLAY, flex:undefined }]}>
           <TouchableOpacity
             style={[S.playBtn, (isPlaying || isInCountdown) && S.playBtnStop]}
             onPress={() => (isPlaying || isInCountdown) ? stopAll() : (withCountdown ? startWithCountdown() : setIsPlaying(true))}>
@@ -799,7 +974,7 @@ export default function App() {
               style={[S.countdownToggle, withCountdown && S.countdownToggleOn]}
               onPress={() => setWithCountdown(v => !v)}>
               <Text style={[S.countdownToggleText, withCountdown && S.countdownToggleTextOn]}>
-                1 2 3 4
+                COUNT-IN
               </Text>
             </TouchableOpacity>
           </View>
@@ -913,7 +1088,7 @@ const S = StyleSheet.create({
   countdownToggle:     { paddingHorizontal:7, paddingVertical:6, borderRadius:9,
                          borderWidth:2, borderColor:"#A8D8B8", backgroundColor:"#FFFFFF" },
   countdownToggleOn:   { borderColor:"#22AA44", backgroundColor:"#EAFAF0" },
-  countdownToggleText: { fontSize:8, fontWeight:"900", color:"#AABBAA", letterSpacing:1 },
+  countdownToggleText: { fontSize:9, fontWeight:"800", color:"#AABBAA", letterSpacing:2 },
   countdownToggleTextOn: { color:"#22AA44" },
   instrShadow: { shadowColor:"#000", shadowOffset:{width:1,height:3}, shadowOpacity:0.22,
                  shadowRadius:3, elevation:4, borderRadius:22 },
@@ -945,7 +1120,7 @@ const S = StyleSheet.create({
   clearBtnText: { fontSize:9, color:"#558866", letterSpacing:2, fontWeight:"800" },
 
   // ── Métronome ────────────────────────────────────────────────────────────
-  metroBtn:     { paddingHorizontal:8, paddingVertical:4, borderRadius:9, alignItems:"center",
+  metroBtn:     { width:47, height:45, paddingHorizontal:8, paddingVertical:4, borderRadius:9, alignItems:"center", justifyContent:"center",
                   borderWidth:2, borderColor:"#A8D8B8", backgroundColor:"#FFFFFF" },
   metroBtnOn:   { borderColor:"#CC9900", backgroundColor:"#FFFBE8" },
   metroBtnText: { fontSize:14, color:"#AABBAA", fontWeight:"900" },
