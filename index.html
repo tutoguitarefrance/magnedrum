@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MagneDrum – Politique de confidentialité</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink: #1a1a2e;
+      --paper: #faf8f3;
+      --accent: #e8533a;
+      --accent2: #f4a24d;
+      --muted: #6b6b7b;
+      --rule: #e2ddd6;
+      --drum: #2d5a8e;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+      line-height: 1.7;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--ink);
+      color: white;
+      padding: 3rem 2rem 2.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::before {
+      content: '🥁';
+      position: absolute;
+      right: -1rem;
+      top: -1rem;
+      font-size: 10rem;
+      opacity: 0.07;
+      transform: rotate(-15deg);
+      pointer-events: none;
+    }
+
+    .header-inner {
+      max-width: 720px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .app-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 100px;
+      padding: 0.3rem 1rem;
+      font-family: 'Syne', sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 1.2rem;
+      color: var(--accent2);
+    }
+
+    header h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 0.6rem;
+    }
+
+    header h1 span {
+      color: var(--accent);
+    }
+
+    .header-sub {
+      color: rgba(255,255,255,0.55);
+      font-size: 0.9rem;
+      font-weight: 300;
+    }
+
+    /* ── CONTENT ── */
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 3rem 2rem 5rem;
+    }
+
+    .intro-card {
+      background: white;
+      border-left: 4px solid var(--accent);
+      border-radius: 0 12px 12px 0;
+      padding: 1.4rem 1.6rem;
+      margin-bottom: 2.5rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .intro-card strong {
+      color: var(--ink);
+    }
+
+    /* Section */
+    section {
+      margin-bottom: 2.8rem;
+    }
+
+    .section-number {
+      font-family: 'Syne', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+    }
+
+    h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    p {
+      font-size: 0.95rem;
+      color: #3a3a4a;
+      margin-bottom: 0.8rem;
+    }
+
+    /* Pill list */
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      list-style: none;
+      margin: 1rem 0;
+    }
+
+    .pill-list li {
+      background: #eef2ff;
+      color: var(--drum);
+      border-radius: 100px;
+      padding: 0.35rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 400;
+    }
+
+    .pill-list li::before {
+      content: '✓ ';
+      opacity: 0.6;
+    }
+
+    /* Highlight box */
+    .highlight {
+      background: linear-gradient(135deg, #fff9f0, #fff4e6);
+      border: 1px solid #fde9c4;
+      border-radius: 12px;
+      padding: 1.2rem 1.4rem;
+      margin: 1.2rem 0;
+    }
+
+    .highlight p {
+      margin: 0;
+      font-size: 0.9rem;
+    }
+
+    /* Contact */
+    .contact-box {
+      background: var(--ink);
+      color: white;
+      border-radius: 16px;
+      padding: 2rem;
+      margin-top: 1.5rem;
+    }
+
+    .contact-box h3 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.1rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .contact-box a {
+      color: var(--accent2);
+      text-decoration: none;
+      font-weight: 400;
+      word-break: break-all;
+    }
+
+    .contact-box a:hover {
+      text-decoration: underline;
+    }
+
+    .contact-box p {
+      color: rgba(255,255,255,0.7);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    .contact-box p + p {
+      margin-top: 0.4rem;
+    }
+
+    /* Footer */
+    footer {
+      background: var(--ink);
+      color: rgba(255,255,255,0.35);
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 0.8rem;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    footer strong {
+      color: rgba(255,255,255,0.6);
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      header, main { padding-left: 1.2rem; padding-right: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="app-badge">🥁 MagneDrum &nbsp;·&nbsp; Tuto Studio</div>
+    <h1>Politique de<br /><span>confidentialité</span></h1>
+    <p class="header-sub">Dernière mise à jour : mars 2025</p>
+  </div>
+</header>
+
+<main>
+
+  <div class="intro-card">
+    Cette politique de confidentialité s'applique à l'application mobile <strong>MagneDrum</strong>, développée par <strong>Tuto Studio</strong> et disponible sur Google Play. Elle explique de manière transparente comment nous traitons (ou ne traitons pas) vos données.
+  </div>
+
+  <!-- 1 -->
+  <section>
+    <p class="section-number">01</p>
+    <h2>Collecte de données personnelles</h2>
+    <p><strong>MagneDrum ne collecte aucune donnée personnelle.</strong></p>
+    <p>L'application ne demande aucun nom, adresse, email, localisation, identifiant ou toute autre information permettant d'identifier un utilisateur.</p>
+    <div class="highlight">
+      <p>🔒 Aucun compte utilisateur n'est requis. Aucune inscription n'est nécessaire pour utiliser l'application.</p>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <p class="section-number">02</p>
+    <h2>Données techniques et analytics</h2>
+    <p>MagneDrum n'intègre aucun SDK de tracking, analytics ou publicité. Aucun outil tiers (Firebase, Crashlytics, AdMob, etc.) n'est utilisé pour collecter des données sur votre usage de l'application.</p>
+    <ul class="pill-list">
+      <li>Pas de Firebase Analytics</li>
+      <li>Pas de publicités</li>
+      <li>Pas de cookies</li>
+      <li>Pas de tracking comportemental</li>
+      <li>Pas de partage avec des tiers</li>
+    </ul>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <p class="section-number">03</p>
+    <h2>Données stockées localement</h2>
+    <p>Certaines préférences et progressions peuvent être sauvegardées <strong>localement sur votre appareil</strong> (mémoire interne), uniquement pour améliorer votre expérience. Ces données :</p>
+    <ul class="pill-list">
+      <li>Ne quittent jamais votre appareil</li>
+      <li>Ne sont pas transmises à nos serveurs</li>
+      <li>Sont supprimées si vous désinstallez l'application</li>
+    </ul>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <p class="section-number">04</p>
+    <h2>Achats intégrés (In-App Purchases)</h2>
+    <p>MagneDrum propose des achats intégrés optionnels pour débloquer du contenu supplémentaire. Ces transactions sont entièrement gérées par <strong>Google Play</strong>.</p>
+    <p>Tuto Studio n'a pas accès à vos informations de paiement (numéro de carte, coordonnées bancaires, etc.). Pour toute question relative aux achats, consultez la <a href="https://policies.google.com/privacy" target="_blank" rel="noopener" style="color: var(--drum);">politique de confidentialité de Google Play</a>.</p>
+  </section>
+
+  <!-- 5 -->
+  <section>
+    <p class="section-number">05</p>
+    <h2>Application destinée aux enfants</h2>
+    <p>MagneDrum est conçue pour les enfants. Conformément aux règles du programme Famille de Google Play et au Règlement général sur la protection des données (RGPD) :</p>
+    <ul class="pill-list">
+      <li>Aucune donnée enfant collectée</li>
+      <li>Aucun contenu adulte</li>
+      <li>Aucun lien externe non sécurisé</li>
+      <li>Conforme RGPD &amp; COPPA</li>
+    </ul>
+  </section>
+
+  <!-- 6 -->
+  <section>
+    <p class="section-number">06</p>
+    <h2>Modifications de cette politique</h2>
+    <p>Tuto Studio se réserve le droit de modifier cette politique à tout moment. En cas de changement significatif, la date de mise à jour sera modifiée en haut de cette page. Nous vous encourageons à la consulter régulièrement.</p>
+  </section>
+
+  <!-- 7 -->
+  <section>
+    <p class="section-number">07</p>
+    <h2>Nous contacter</h2>
+    <p>Pour toute question relative à cette politique de confidentialité :</p>
+    <div class="contact-box">
+      <h3>Tuto Studio</h3>
+      <p>📧 <a href="mailto:tutoguitare.france@gmail.com">tutoguitare.france@gmail.com</a></p>
+      <p style="margin-top: 1rem;">Nous nous efforçons de répondre à toute demande dans un délai de 30 jours.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <strong>MagneDrum</strong> &nbsp;·&nbsp; Tuto Studio &nbsp;·&nbsp; © 2025 &nbsp;·&nbsp;
+  <a href="mailto:tutoguitare.france@gmail.com" style="color: rgba(255,255,255,0.45);">tutoguitare.france@gmail.com</a>
+</footer>
+
+</body>
+</html>
